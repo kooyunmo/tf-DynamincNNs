@@ -142,36 +142,68 @@ def parse_record(raw_record, is_training=True, dtype=tf.float32):
 
 ################################################################
 
+class ListAverageMeter(object):
+    """Computes and stores the average and current values of a list"""
 
+    def __init__(self):
+        self.len = 10000  # set up the maximum length
+        self.reset()
+
+    def reset(self):
+        self.val = [0] * self.len
+        self.avg = [0] * self.len
+        self.sum = [0] * self.len
+        self.count = 0
+
+    def set_len(self, n):
+        self.len = n
+        self.reset()
+
+    def update(self, vals, n=1):
+        assert len(vals) == self.len, 'length of vals not equal to self.len'
+        self.val = vals
+        for i in range(self.len):
+            self.sum[i] += self.val[i] * n
+        self.count += n
+        for i in range(self.len):
+            self.avg[i] = self.sum[i] / self.count
 
 #@tf.function
-def _one_step(model, x, y):
-    y_ = model(x, training=True)
-    #loss = tf.losses.softmax_cross_entropy(y, y_)
-    print("y: ", y.shape)
-    print("y_: ", y_.shape)
-    loss = tf.nn.softmax_cross_entropy_with_logits(y, y_)
+def _one_step(model, x, y, skip_ratios):
+    '''
+    ouput: tf.Tensor: shape=(8,1000)
+    masks: array of tf.Tensors: shape=(8,)
+    probs: array of tf.Tensors: shape=(8,)
+    hidden: tuple(tf.Tensor: shape=(1,8,10), tf.Tensor: shape=(1,8,10))
+    '''
+    output, masks, probs, hidden = model(x, training=True)
+
+    #skips = [mask.data.le(0.5).float().mean() for mask in masks]
+    skips = [tf.reduce_mean(tf.cast((mask <= 0.5), tf.float32)) for mask in masks]
+    if skip_ratios.len != len(skips):
+        skip_ratios.set_len(len(skips))
+
+    #loss = criterion(output, target_var)
+    loss = tf.nn.softmax_cross_entropy_with_logits(y, output)
+
+    #skip_ratios.update(skips, input.size(0))
+    skip_ratios.update(skips, x.shape[0])
 
     return loss
 
 
 # Trains the model for certains epochs on a dataset
 def train(dset_train, dset_test, model, epochs=5, show_loss=False):
-    # Define summary writers and global step for logging
-    #writer_train = tf.contrib.summary.create_file_writer('./logs/train')
-    #writer_test = tf.contrib.summary.create_file_writer('./logs/test')
-    #global_step=tf.train.get_or_create_global_step()  # return global step var
-
+    
     for epoch in range(epochs):
+        skip_ratios = ListAverageMeter()
         time_sum = 0
         cnt = 0
         for x, y in dset_train: # for every batch
             y = tf.one_hot(y, 1000)
             start = time.time()
-            #global_step.assign_add(1) # add one step per iteration
             with tf.GradientTape() as g:
-                #write_summary(loss, writer_train, 'loss')
-                loss = _one_step(model, x, y)
+                loss = _one_step(model, x, y, skip_ratios)
                 print('Training loss: ' + str(loss.numpy()))
 
             # Gets gradients and applies them
