@@ -8,12 +8,15 @@ import tensorflow as tf
 import tensorflow.keras as keras
 from threading import Lock
 
+import time
+
+#tf.keras.backend.set_image_data_format('channels_first')
 
 global_lock = Lock()
 
 def conv3x3(in_planes, out_planes, stride=1):
     '''3x3 convolution with padding'''
-    return keras.layers.Conv2D(out_planes, kernel_size=(3, 3), stride=(stride, stride),
+    return keras.layers.Conv2D(out_planes, kernel_size=(3, 3), strides=(stride, stride),
                                padding='same', use_bias=False)
 
 
@@ -56,7 +59,7 @@ class Bottleneck(keras.models.Model):
         super(Bottleneck, self).__init__()
         self.conv1 = keras.layers.Conv2D(planes, kernel_size=(1, 1), use_bias=False)
         self.bn1 = keras.layers.BatchNormalization()
-        self.conv2 = keras.layers.Conv2D(planes, kernel_size=(3, 3), stride=(stride, stride),
+        self.conv2 = keras.layers.Conv2D(planes, kernel_size=(3, 3), strides=(stride, stride),
                                          padding='same', use_bias=False)
         self.bn2 = keras.layers.BatchNormalization()
         self.conv3 = keras.layers.Conv2D(planes * 4, kernel_size=(1, 1), use_bias=False)
@@ -86,6 +89,119 @@ class Bottleneck(keras.models.Model):
         out = self.relu(out)
 
         return out
+
+class ResNet(keras.models.Model):
+    def __init__(self, block, layers, num_classes=1000):
+        self.inplanes = 64
+        super(ResNet, self).__init__()
+        self.conv1 = keras.layers.Conv2D(64, kernel_size=(7, 7), strides=(2, 2), padding='same',
+                                         use_bias=False)
+        self.bn1 = keras.layers.BatchNormalization()
+        self.relu = keras.layers.ReLU()
+        self.maxpool = keras.layers.MaxPool2D(pool_size=(3, 3), strides=(2, 2), padding='same')
+        
+        self.layer1 = self._make_layer(block, 64, layers[0])
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
+        self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
+        self.avgpool = keras.layers.AveragePooling2D(pool_size=(7, 7))   # nn.AvgPool2d(7)
+        # self.fc = nn.Linear(512 * block.expansion, num_classes)
+        self.fc = keras.layers.Dense(num_classes)
+
+        '''
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                m.weight.data.normal_(0, math.sqrt(2. / n))
+            elif isinstance(m, nn.BatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+        '''
+
+    def _make_layer(self, block, planes, blocks, stride=1):
+        downsample = None
+        if stride != 1 or self.inplanes != planes * block.expansion:
+            downsample = keras.Sequential([
+                keras.layers.Conv2D(planes * block.expansion, kernel_size=(1, 1),
+                                    strides=(stride, stride), use_bias=False),
+                keras.layers.BatchNormalization()
+            ])
+
+        layers = []
+        layers.append(block(self.inplanes, planes, stride, downsample))
+        self.inplanes = planes * block.expansion
+        for _ in range(1, blocks):
+            layers.append(block(self.inplanes, planes))
+
+        return keras.Sequential(layers)
+
+    def call(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+
+        x = self.avgpool(x)
+        x = tf.reshape(x, [x.shape[0], -1])   # x.view(x.size(0), -1)
+        x = self.fc(x)
+
+        return x
+
+
+def resnet18(pretrained=False, **kwargs):
+    """Constructs a ResNet-18 model.
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+    """
+    model = ResNet(BasicBlock, [2, 2, 2, 2], **kwargs)
+    return model
+
+
+def resnet34(pretrained=False, **kwargs):
+    """Constructs a ResNet-34 model.
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+    """
+    model = ResNet(BasicBlock, [3, 4, 6, 3], **kwargs)
+    return model
+
+
+def resnet50(pretrained=False, **kwargs):
+    """Constructs a ResNet-50 model.
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+    """
+    model = ResNet(Bottleneck, [3, 4, 6, 3], **kwargs)
+    return model
+
+
+def resnet74(pretrained=False, **kwargs):
+    """ ResNet-74"""
+    model = ResNet(Bottleneck, [3, 4, 14, 3], **kwargs)
+    return model
+
+
+def resnet101(pretrained=False,  **kwargs):
+    """Constructs a ResNet-101 model.
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+    """
+    model = ResNet(Bottleneck, [3, 4, 23, 3], **kwargs)
+    return model
+
+
+def resnet152(pretrained=False,  **kwargs):
+    """Constructs a ResNet-152 model.
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+    """
+    model = ResNet(Bottleneck, [3, 8, 36, 3], **kwargs)
+    return model
 
 
 # ======================
@@ -124,28 +240,29 @@ class RNNGate(keras.models.Model):
         # why they have this dimensionality.
         # The axes semantics are (num_layers, minibatch_size, hidden_dim)
         # return (torch.zeros(1, batch_size, self.hidden_dim).cuda()), torch.zeros(1, batch_size, self.hidden_dim).cuda()))
-        return (tf.zeros([1, batch_size, self.hidden_dim]), tf.zeros(1, batch_size, self.hidden_dim))
+        return (tf.zeros([1, batch_size, self.hidden_dim]), tf.zeros([1, batch_size, self.hidden_dim]))
 
     def repackage_hidden(self):
         self.hidden = repackage_hidden(self.hidden)
 
-    def forward(self, x):
+    def call(self, x):
         batch_size = x.shape[0]  # x.size(0)
         # self.rnn.flatten_parameters()     # skip this
 
-        # out, self.hidden = self.rnn(x.view(1, batch_size, -1), self.hidden)
-        out, self.hidden = self.rnn(tf.reshape(x, [1, batch_size, -1]))
+        # out, self.hidden = self.rnn(x.view(1, batch_size, -1), self.hidden)   # (seq_len, batch, input_size)
+        out = self.rnn(tf.reshape(x, [batch_size, 1, -1]))  # (batch_size, max_length, features)
 
         #out = out.squeeze()
         out = tf.squeeze(out)
         #proj = self.proj(out.view(out.size(0), out.size(1), 1, 1,)).squeeze()
-        proj = self.proj(tf.reshape(out, [out.shape[0], out.shape[1], 1, 1,])).squeeze()
+        proj = self.proj(tf.reshape(out, [out.shape[0], 1, 1, out.shape[1]]))
+        proj = tf.squeeze(proj)
         prob = self.prob(proj)
 
         #disc_prob = (prob > 0.5).float().detach() - prob.detach() + prob
         disc_prob = tf.stop_gradient(tf.cast((prob > 0.5), tf.float32)) - tf.stop_gradient(prob) + prob
         #disc_prob = disc_prob.view(batch_size, 1, 1, 1)
-        disc_prob = tf.reshape(disc_prob, [batch_size,1,1,1])
+        disc_prob = tf.reshape(disc_prob, [batch_size, 1, 1, 1])
         
         return disc_prob, prob
 
@@ -159,12 +276,12 @@ class RecurrentGatedResNet(keras.models.Model):
         self.inplanes = 64
         super(RecurrentGatedResNet, self).__init__()
 
-        self.num_layers = len(layers)
-        self.conv1 = keras.layers.Conv2D(64, kernel_size=(7, 7), stride=(2, 2),
+        self.num_layers = layers
+        self.conv1 = keras.layers.Conv2D(64, kernel_size=(7, 7), strides=(2, 2),
                                          padding='same', use_bias=False)
         self.bn1 = keras.layers.BatchNormalization()
         self.relu = keras.layers.ReLU()
-        self.maxpool = keras.layers.MaxPool2D((3, 3), strides=(2, 2), padding='valid')
+        self.maxpool = keras.layers.MaxPool2D((3, 3), strides=(2, 2), padding='same')
 
         self.embed_dim = embed_dim
         self.hidden_dim = hidden_dim
@@ -220,19 +337,19 @@ class RecurrentGatedResNet(keras.models.Model):
         """ create one block and optional a gate module """
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
-            downsample = keras.Sequential(
+            downsample = keras.Sequential([
                 keras.layers.Conv2D(planes * block.expansion, kernel_size=(1, 1),
-                                    stride=(stride, stride), use_bias=False),
+                                    strides=(stride, stride), use_bias=False),
                 keras.layers.BatchNormalization()
-            )
+            ])
         layer = block(self.inplanes, planes, stride, downsample)
         self.inplanes = planes * block.expansion
 
         # this is for having the same input dimension to rnn gate.
-        gate_layer = keras.Sequential(
+        gate_layer = keras.Sequential([
             keras.layers.AveragePooling2D((pool_size, pool_size)),
-            keras.layers.Conv2D(self.embed_dim, kernel_size=(1, 1), stride=(1, 1))
-        )
+            keras.layers.Conv2D(self.embed_dim, kernel_size=(1, 1), strides=(1, 1))
+        ])
         
         if downsample:
             return downsample, layer, gate_layer
@@ -242,7 +359,7 @@ class RecurrentGatedResNet(keras.models.Model):
     def repackage_hidden(self):
         self.control.hidden = repackage_hidden(self.control.hidden)
 
-    def forward(self, x):
+    def call(self, x):
         """mask_values is for the test random gates"""
         # pdb.set_trace()
 
@@ -263,7 +380,8 @@ class RecurrentGatedResNet(keras.models.Model):
         gate_feature = getattr(self, 'group1_gate0')(x)
         mask, gprob = self.control(gate_feature)
         gprobs.append(gprob)
-        masks.append(mask.squeeze())
+        #masks.append(mask.squeeze())
+        masks.append(tf.squeeze(mask))
         prev = x  # input of next layer
 
         for g in range(4):
@@ -271,7 +389,8 @@ class RecurrentGatedResNet(keras.models.Model):
                 if getattr(self, 'group{}_ds{}'.format(g+1, i)) is not None:
                     prev = getattr(self, 'group{}_ds{}'.format(g+1, i))(prev)
                 x = getattr(self, 'group{}_layer{}'.format(g+1, i))(x)
-                prev = x = mask.expand_as(x)*x + (1-mask).expand_as(prev)*prev
+                #prev = x = mask.expand_as(x)*x + (1-mask).expand_as(prev)*prev
+                prev = x = tf.broadcast_to(mask, x.shape)*x + tf.broadcast_to((1-mask), prev.shape)*prev
                 gate_feature = getattr(self, 'group{}_gate{}'.format(g+1, i))(x)
                 mask, gprob = self.control(gate_feature)
                 if not (g == 3 and i == (self.num_layers[3]-1)):
@@ -284,3 +403,36 @@ class RecurrentGatedResNet(keras.models.Model):
         x = self.fc(x)
 
         return x, masks, gprobs, self.control.hidden
+
+
+def imagenet_rnn_gate_18(pretrained=False, **kwargs):
+    """ Construct SkipNet-18 + SP """
+    model = RecurrentGatedResNet(BasicBlock, [2, 2, 2, 2], embed_dim=10, hidden_dim=10, gate_type='rnn')
+    return model
+
+def imagenet_rnn_gate_34(pretrained=False, **kwargs):
+    """ Construct SkipNet-34 + SP """
+    model = RecurrentGatedResNet(BasicBlock, [3, 4, 6, 3],
+                                 embed_dim=10, hidden_dim=10, gate_type='rnn')
+    return model
+
+
+def imagenet_rnn_gate_50(pretrained=False, **kwargs):
+    """ Construct SkipNet-50 + SP """
+    model = RecurrentGatedResNet(Bottleneck, [3, 4, 6, 3],
+                                 embed_dim=10, hidden_dim=10, gate_type='rnn')
+    return model
+
+
+def imagenet_rnn_gate_101(pretrained=False,  **kwargs):
+    """ Constructs SkipNet-101 + SP """
+    model = RecurrentGatedResNet(Bottleneck, [3, 4, 23, 3],
+                                 embed_dim=10, hidden_dim=10, gate_type='rnn')
+    return model
+
+
+def imagenet_rnn_gate_152(pretrained=False,  **kwargs):
+    """Constructs SkipNet-152 + SP """
+    model = RecurrentGatedResNet(Bottleneck, [3, 8, 36, 3],
+                                 embed_dim=10, hidden_dim=10, gate_type='rnn')
+    return model
