@@ -168,7 +168,7 @@ class ListAverageMeter(object):
         for i in range(self.len):
             self.avg[i] = self.sum[i] / self.count
 
-@tf.function
+#@tf.function
 def _one_step(model, x, y, skip_ratios):
     '''
     ouput: tf.Tensor: shape=(BATCH_SIZE,1000)
@@ -197,7 +197,7 @@ def _one_step(model, x, y, skip_ratios):
     return output, loss
 
 train_loss = tf.keras.metrics.Mean(name='train_loss')
-train_acc = tf.keras.metrics.CategoricalAccuracy(name='train_acc')
+train_acc = tf.keras.metrics.Accuracy(name='train_acc')
 
 # Trains the model for certains epochs on a dataset
 def train(dset_train, dset_test, model, epochs=5, show_loss=False):
@@ -207,7 +207,7 @@ def train(dset_train, dset_test, model, epochs=5, show_loss=False):
         time_sum = 0
         cnt = 0
         for x, y in dset_train: # for every batch
-            y = tf.one_hot(y, 1000)
+            y = tf.one_hot(y, 1001)
             start = time.time()
             with tf.GradientTape() as g:
                 preds, loss = _one_step(model, x, y, skip_ratios)
@@ -219,7 +219,7 @@ def train(dset_train, dset_test, model, epochs=5, show_loss=False):
             cnt += 1
 
             train_loss(loss)
-            train_acc(y, tf.nn.softmax(preds))
+            train_acc(tf.argmax(y, 1), tf.argmax(preds, 1))
 
             if cnt % 50 == 49:
         	    print("[BATCH {}]avg elapsed time: {}sec/step || loss: {} || acc: {}".format(cnt, time_sum / cnt,
@@ -275,7 +275,7 @@ def init_model(model, input_shape):
 if __name__ == "__main__":
 
     # constants for imagenet
-    batch_size = 8
+    batch_size = 32     # TITAN XP: OOM with batch size 64
     epochs = 1
     image_size = 224
     channels = 3

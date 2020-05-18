@@ -159,7 +159,7 @@ def parse_record(raw_record, is_training=True, dtype=tf.float32):
 
 
 
-#@tf.function
+@tf.function
 def _one_step(model, x, y):
     output = model(x, training=True)
     
@@ -172,6 +172,7 @@ def _one_step(model, x, y):
 
     return loss
 
+train_loss = tf.keras.metrics.Mean(name='train_loss')
 
 # Trains the model for certains epochs on a dataset
 def train(dset_train, dset_test, model, epochs=5, show_loss=False):
@@ -184,36 +185,25 @@ def train(dset_train, dset_test, model, epochs=5, show_loss=False):
         time_sum = 0
         cnt = 0
         for x, y in dset_train: # for every batch
-            y = tf.one_hot(y, 1000)
+            y = tf.one_hot(y, 1001)
             start = time.time()
-            #global_step.assign_add(1) # add one step per iteration
             with tf.GradientTape() as g:
-                #write_summary(loss, writer_train, 'loss')
                 loss = _one_step(model, x, y)
-                print('Training loss: ' + str(loss.numpy()))
 
-            # Gets gradients and applies them
             grads = g.gradient(loss, model.trainable_variables)
             optimizer.apply_gradients(zip(grads, model.trainable_variables))
 
             time_sum += time.time() - start
             cnt += 1
 
-            if cnt % 100 == 99:
+            train_loss(loss)
+
+            if cnt % 50 == 49:
         	    print("[EPOCH {}/{} BATCH {}] avg elapsed time: {}sec/step || loss: {}".format(epoch+1, epochs, cnt,
                                                                                                time_sum / cnt, 
-                                                                                               loss))
+                                                                                               train_loss.result()))
 
         print("[EPOCH {}/{}] avg elapsed time: {}sec/step".format(epoch+1, epochs, time_sum / cnt))
-
-		# Get accuracies
-		#train_acc = get_accuracy(dset_train, model, training=True)
-		#test_acc = get_accuracy(dset_test, model, writer=writer_test)
-		# write summaries and print
-		#write_summary(train_acc, writer_train, 'accuracy')
-		#write_summary(test_acc, writer_test, 'accuracy')
-		#print('Train accuracy: ' + str(train_acc.numpy()))
-		#print('Test accuracy: ' + str(test_acc.numpy()))
 
 
 # Tests the model on a dataset
@@ -250,7 +240,7 @@ def init_model(model, input_shape):
 if __name__ == "__main__":
 
     # constants for imagenet
-    batch_size = 8
+    batch_size = 64
     epochs = 1
     image_size = 224
     channels = 3

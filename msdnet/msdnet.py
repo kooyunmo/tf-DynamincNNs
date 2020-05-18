@@ -79,14 +79,16 @@ class ConvDownNormal(keras.models.Model):
     def call(self, x):
         res = [x[1],
                self.conv_down(x[0]),
-               self.conv_normal(x[1])]
-        #return torch.cat(res, dim=1)
-        return tf.concat(res, axis=1)
+               self.conv_normal(x[1])] 
+        #return torch.cat(res, dim=1)   # PyTorch has NCHW data format => concat over the dim 1.
+        return tf.concat(res, axis=3)   # since TF adopt NHWC data format, the concat dimension should be 3.
 
 
 class ConvNormal(keras.models.Model):
     def __init__(self, nIn, nOut, bottleneck, bnWidth):
         super(ConvNormal, self).__init__()
+        self.nIn = nIn
+        self.nOut = nOut
         self.conv_normal = ConvBN(nIn, nOut, 'normal',
                                   bottleneck, bnWidth)
 
@@ -96,8 +98,8 @@ class ConvNormal(keras.models.Model):
         res = [x[0],
                self.conv_normal(x[0])]
 
-        #return torch.cat(res, dim=1)
-        return tf.concat(res, axis=1)
+        #return torch.cat(res, dim=1)   # PyTorch has NCHW data format => concat over the dim 1.
+        return tf.concat(res, axis=3)   # since TF adopt NHWC data format, the concat dimension should be 3.
 
 
 class MSDNFirstLayer(keras.models.Model):
@@ -126,16 +128,11 @@ class MSDNFirstLayer(keras.models.Model):
             nIn = nOut * args.grFactor[i]
 
     def call(self, x):
-        print("FIRST LAYER CALLED!!!!!!!")
         res = []
         for i in range(len(self.f_layers)):
             x = self.f_layers[i](x)
             res.append(x)
-            print("x.shape: ", x.shape)
 
-        print("len(res): ", len(res))
-
-        print("RETURN FROM FIRST LAYER!!!!!!")
         return res
 
 
@@ -176,7 +173,6 @@ class MSDNLayer(keras.models.Model):
                                               args.bnFactor[i]))
 
     def call(self, x):
-        print("MSDN LAYERS CALLED!!!!!!!")
         if self.discard > 0:
             inp = []
             for i in range(1, self.outScales + 1):
@@ -252,10 +248,9 @@ class MSDNet(keras.models.Model):
         for i in range(self.nBlocks):
             print(' ********************** Block {} '
                   ' **********************'.format(i + 1))
-            m, nIn = \
-                self._build_block(nIn, args, self.steps[i],
-                                  n_layers_all, n_layer_curr)
-            self.blocks.append(m)
+            m, nIn = self._build_block(nIn, args, self.steps[i],        # `m` is `keras.Sequential` module
+                                       n_layers_all, n_layer_curr)
+            self.blocks.append(m)       # `self.blocks` is a python list containing `keras.Seqential` modules
             n_layer_curr += self.steps[i]
 
             if args.data.startswith('cifar100'):
@@ -266,7 +261,7 @@ class MSDNet(keras.models.Model):
                     self._build_classifier_cifar(nIn * args.grFactor[-1], 10))
             elif args.data == 'ImageNet':
                 self.classifier.append(
-                    self._build_classifier_imagenet(nIn * args.grFactor[-1], 1000))
+                    self._build_classifier_imagenet(nIn * args.grFactor[-1], 1001))
             else:
                 raise NotImplementedError
 
@@ -341,7 +336,8 @@ class MSDNet(keras.models.Model):
                 print('|\t\tTransition layer inserted! (min)\t|')
             print("")
 
-        return keras.Sequential(layers), nIn
+        #return keras.Sequential(layers), nIn
+        return layers, nIn
 
     def _build_transition(self, nIn, nOut, outScales, offset, args):
         net = []
@@ -381,12 +377,10 @@ class MSDNet(keras.models.Model):
         
         return res
         '''
-        for i in range(self.nBlocks):
-            print("self.nBlocks[{}].layers: {}".format(i, self.blocks[i].layers))
 
         res = []
         for i in range(self.nBlocks):
-            x = self.blocks[i](x)
+            for _, module in enumerate(self.blocks[i]):
+               x = module(x)
             res.append(self.classifier[i](x))
-        
         return res

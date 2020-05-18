@@ -91,7 +91,7 @@ class Bottleneck(keras.models.Model):
         return out
 
 class ResNet(keras.models.Model):
-    def __init__(self, block, layers, num_classes=1000):
+    def __init__(self, block, layers, num_classes=1001):
         self.inplanes = 64
         super(ResNet, self).__init__()
         self.conv1 = keras.layers.Conv2D(64, kernel_size=(7, 7), strides=(2, 2), padding='same',
@@ -271,7 +271,7 @@ class RNNGate(keras.models.Model):
 # Recurrent Gate Model
 # =======================
 class RecurrentGatedResNet(keras.models.Model):
-    def __init__(self, block, layers, num_classes=1000, embed_dim=10,
+    def __init__(self, block, layers, num_classes=1001, embed_dim=10,
                  hidden_dim=10, gate_type='rnn', **kwargs):
         self.inplanes = 64
         super(RecurrentGatedResNet, self).__init__()
