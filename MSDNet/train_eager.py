@@ -159,7 +159,7 @@ def parse_record(raw_record, is_training=True, dtype=tf.float32):
 
 
 
-@tf.function
+#@tf.function
 def _one_step(model, x, y):
     output = model(x, training=True)
     
@@ -176,11 +176,7 @@ train_loss = tf.keras.metrics.Mean(name='train_loss')
 
 # Trains the model for certains epochs on a dataset
 def train(dset_train, dset_test, model, epochs=5, show_loss=False):
-    # Define summary writers and global step for logging
-    #writer_train = tf.contrib.summary.create_file_writer('./logs/train')
-    #writer_test = tf.contrib.summary.create_file_writer('./logs/test')
-    #global_step=tf.train.get_or_create_global_step()  # return global step var
-
+    
     for epoch in range(epochs):
         time_sum = 0
         cnt = 0
@@ -260,13 +256,9 @@ if __name__ == "__main__":
     parsed_dataset_train = raw_dataset_train.map(parse_record).shuffle(1024).batch(batch_size)
     parsed_dataset_tests = raw_dataset_test.map(parse_record).shuffle(1024).batch(batch_size)
 
-    # dataset_train = imagenet.get_split('train', data_dir)
-    # dataset_tests = imagenet.get_split('test', data_dir)
-
     model = msdnet.MSDNet(args)
 
     # optimizer
-    #optimizer = tf.train.AdamOptimizer(0.001)
     optimizer = tf.keras.optimizers.Adam()
 
     print("############ Start Training ##############")
