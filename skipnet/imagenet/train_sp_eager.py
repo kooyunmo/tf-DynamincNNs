@@ -168,29 +168,36 @@ class ListAverageMeter(object):
         for i in range(self.len):
             self.avg[i] = self.sum[i] / self.count
 
-#@tf.function
+@tf.function
 def _one_step(model, x, y, skip_ratios):
     '''
-    ouput: tf.Tensor: shape=(8,1000)
-    masks: array of tf.Tensors: shape=(8,)
-    probs: array of tf.Tensors: shape=(8,)
-    hidden: tuple(tf.Tensor: shape=(1,8,10), tf.Tensor: shape=(1,8,10))
+    ouput: tf.Tensor: shape=(BATCH_SIZE,1000)
+    masks: array of tf.Tensors: shape=(BATCH_SIZE,)
+    probs: array of tf.Tensors: shape=(BATCH_SIZE,)
+    hidden: tuple(tf.Tensor: shape=(1,BATCH_SIZE,10), tf.Tensor: shape=(1,BATCH_SIZE,10))
     '''
     output, masks, probs, hidden = model(x, training=True)
+    #output = model(x, training=True)
 
     #skips = [mask.data.le(0.5).float().mean() for mask in masks]
+    '''
     skips = [tf.reduce_mean(tf.cast((mask <= 0.5), tf.float32)) for mask in masks]
     if skip_ratios.len != len(skips):
         skip_ratios.set_len(len(skips))
-
+    '''
+    
     #loss = criterion(output, target_var)
     loss = tf.nn.softmax_cross_entropy_with_logits(y, output)
 
+    '''
     #skip_ratios.update(skips, input.size(0))
     skip_ratios.update(skips, x.shape[0])
+    '''
 
-    return loss
+    return output, loss
 
+train_loss = tf.keras.metrics.Mean(name='train_loss')
+train_acc = tf.keras.metrics.CategoricalAccuracy(name='train_acc')
 
 # Trains the model for certains epochs on a dataset
 def train(dset_train, dset_test, model, epochs=5, show_loss=False):
@@ -203,20 +210,26 @@ def train(dset_train, dset_test, model, epochs=5, show_loss=False):
             y = tf.one_hot(y, 1000)
             start = time.time()
             with tf.GradientTape() as g:
-                loss = _one_step(model, x, y, skip_ratios)
-                print('Training loss: ' + str(loss.numpy()))
-
-            # Gets gradients and applies them
+                preds, loss = _one_step(model, x, y, skip_ratios)
+            
             grads = g.gradient(loss, model.trainable_variables)
             optimizer.apply_gradients(zip(grads, model.trainable_variables))
 
             time_sum += time.time() - start
             cnt += 1
 
-            if cnt % 100 == 99:
-        	    print("avg elapsed time: {}sec/step || loss: {}".format(time_sum / cnt, loss))
+            train_loss(loss)
+            train_acc(y, tf.nn.softmax(preds))
 
-        print("[EPOCH {}/{}] avg elapsed time: {}sec/step".format(epoch+1, epochs, time_sum / cnt))
+            if cnt % 50 == 49:
+        	    print("[BATCH {}]avg elapsed time: {}sec/step || loss: {} || acc: {}".format(cnt, time_sum / cnt,
+                                                                                             train_loss.result(),
+                                                                                             train_acc.result() * 100))
+
+        print("[EPOCH {}/{}] avg elapsed time: {}sec/step || loss: {} || acc: {}".format(epoch+1, epochs,
+                                                                                         time_sum / cnt,
+                                                                                         train_loss.result(),
+                                                                                         train_acc.result() * 100))
 
 		# Get accuracies
 		#train_acc = get_accuracy(dset_train, model, training=True)
