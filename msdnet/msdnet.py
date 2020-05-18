@@ -104,9 +104,9 @@ class MSDNFirstLayer(keras.models.Model):
     def __init__(self, nIn, nOut, args):
         super(MSDNFirstLayer, self).__init__()
         #self.layers = nn.ModuleList()
-        self.layers = list()
+        self.f_layers = list()
         if args.data.startswith('cifar'):
-            self.layers.append(ConvBasic(nIn, nOut * args.grFactor[0],
+            self.f_layers.append(ConvBasic(nIn, nOut * args.grFactor[0],
                                          kernel=3, stride=1, padding=1))
         elif args.data == 'ImageNet':
             conv = keras.Sequential([
@@ -116,21 +116,26 @@ class MSDNFirstLayer(keras.models.Model):
                 keras.layers.ReLU(),
                 keras.layers.MaxPool2D(pool_size=(3, 3), strides=(2, 2),
                                        padding='same')])
-            self.layers.append(conv)
+            self.f_layers.append(conv)
 
         nIn = nOut * args.grFactor[0]
 
         for i in range(1, args.nScales):
-            self.layers.append(ConvBasic(nIn, nOut * args.grFactor[i],
+            self.f_layers.append(ConvBasic(nIn, nOut * args.grFactor[i],
                                          kernel=3, stride=2, padding=1))
             nIn = nOut * args.grFactor[i]
 
     def call(self, x):
+        print("FIRST LAYER CALLED!!!!!!!")
         res = []
-        for i in range(len(self.layers)):
-            x = self.layers[i](x)
+        for i in range(len(self.f_layers)):
+            x = self.f_layers[i](x)
             res.append(x)
+            print("x.shape: ", x.shape)
 
+        print("len(res): ", len(res))
+
+        print("RETURN FROM FIRST LAYER!!!!!!")
         return res
 
 
@@ -147,17 +152,17 @@ class MSDNLayer(keras.models.Model):
 
         self.offset = self.nScales - self.outScales
         #self.layers = nn.ModuleList()
-        self.layers = list()
+        self.msdn_layers = list()
 
         if self.discard > 0:
             nIn1 = nIn * args.grFactor[self.offset - 1]
             nIn2 = nIn * args.grFactor[self.offset]
             _nOut = nOut * args.grFactor[self.offset]
-            self.layers.append(ConvDownNormal(nIn1, nIn2, _nOut, args.bottleneck,
+            self.msdn_layers.append(ConvDownNormal(nIn1, nIn2, _nOut, args.bottleneck,
                                               args.bnFactor[self.offset - 1],
                                               args.bnFactor[self.offset]))
         else:
-            self.layers.append(ConvNormal(nIn * args.grFactor[self.offset],
+            self.msdn_layers.append(ConvNormal(nIn * args.grFactor[self.offset],
                                           nOut * args.grFactor[self.offset],
                                           args.bottleneck,
                                           args.bnFactor[self.offset]))
@@ -166,11 +171,12 @@ class MSDNLayer(keras.models.Model):
             nIn1 = nIn * args.grFactor[i - 1]
             nIn2 = nIn * args.grFactor[i]
             _nOut = nOut * args.grFactor[i]
-            self.layers.append(ConvDownNormal(nIn1, nIn2, _nOut, args.bottleneck,
+            self.msdn_layers.append(ConvDownNormal(nIn1, nIn2, _nOut, args.bottleneck,
                                               args.bnFactor[i - 1],
                                               args.bnFactor[i]))
 
     def call(self, x):
+        print("MSDN LAYERS CALLED!!!!!!!")
         if self.discard > 0:
             inp = []
             for i in range(1, self.outScales + 1):
@@ -182,7 +188,7 @@ class MSDNLayer(keras.models.Model):
 
         res = []
         for i in range(self.outScales):
-            res.append(self.layers[i](inp[i]))
+            res.append(self.msdn_layers[i](inp[i]))
 
         return res
 
@@ -223,7 +229,6 @@ class ClassifierModule(keras.models.Model):
         #res = res.view(res.size(0), -1)
         res = tf.reshape(res, [res.shape[0], -1])
         return self.linear(res)
-
 
 class MSDNet(keras.models.Model):
     def __init__(self, args):
@@ -364,8 +369,24 @@ class MSDNet(keras.models.Model):
         return ClassifierModule(conv, nIn, num_classes)
 
     def call(self, x):
+        '''
+        All layers in a Sequential model should have a single output tensor.
+        For multi-output layers, use the functional API.
+        '''
+        '''
         res = []
         for i in range(self.nBlocks):
             x = self.blocks[i](x)
             res.append(self.classifier[i](x))
+        
+        return res
+        '''
+        for i in range(self.nBlocks):
+            print("self.nBlocks[{}].layers: {}".format(i, self.blocks[i].layers))
+
+        res = []
+        for i in range(self.nBlocks):
+            x = self.blocks[i](x)
+            res.append(self.classifier[i](x))
+        
         return res
