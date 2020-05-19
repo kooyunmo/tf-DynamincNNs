@@ -57,19 +57,21 @@ class BasicBlock(keras.models.Model):
         return out
 
 
-class Bottleneck(nn.Module):
+class Bottleneck(keras.models.Model):
     expansion = 4
 
     def __init__(self, inplanes, planes, stride=1, downsample=None):
         super(Bottleneck, self).__init__()
-        self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(inplanes)
-        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride,
-                               padding=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(planes)
-        self.conv3 = nn.Conv2d(planes, planes * self.expansion, kernel_size=1, bias=False)
-        self.bn3 = nn.BatchNorm2d(planes)
-        self.relu = nn.ReLU(inplace=True)
+        self.conv1 = keras.layers.Conv2D(planes, kernel_size=(1, 1), strides=(1, 1),
+                                         padding='same', use_bias=False)
+        self.bn1 = keras.layers.BatchNormalization()
+        self.conv2 = keras.layers.Conv2D(planes, kernel_size=(3, 3), strides=(stride, stride),
+                                         padding='same', use_bias=False)
+        self.bn2 = keras.layers.BatchNormalization()
+        self.conv3 =keras.layers.Conv2D(planes * self.expansion, kernel_size=(1, 1),
+                                        strides=(1, 1), padding='same', use_bias=False)
+        self.bn3 = keras.layers.BatchNormalization() 
+        self.relu = keras.layers.ReLU()
         self.downsample = downsample
         self.stride = stride
 
@@ -78,7 +80,7 @@ class Bottleneck(nn.Module):
         blockID += 1
         self.downsampling_ratio = 1.
 
-    def forward(self, x):
+    def call(self, x):
         residual = x
 
         out = self.bn1(x)
@@ -99,37 +101,41 @@ class Bottleneck(nn.Module):
         out += residual
 
         if self.downsampling_ratio < 1:
-            out = F.adaptive_avg_pool2d(out, int(round(out.size(2)*self.downsampling_ratio)))
+            #out = F.adaptive_avg_pool2d(out, int(round(out.size(2)*self.downsampling_ratio)))
+            out = tf.nn.avg_pool2d(out, int(round(out.shape[2] * self.downsampling_ratio)),
+                                   strides=int(round(out.shape[2] * self.downsampling_ratio)),
+                                   padding='same')
 
         return out
 
 
-class PreResNet(nn.Module):
+class PreResNet(keras.models.Model):
 
-    def __init__(self, block, layers, num_classes=1000):
+    def __init__(self, block, layers, num_classes=1001):
         self.inplanes = 64
         super(PreResNet, self).__init__()
 
         global blockID
         blockID = 0
 
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
-                               bias=False)
-        self.bn1 = nn.BatchNorm2d(64)
-        self.relu = nn.ReLU(inplace=True)
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.conv1 = keras.layers.Conv2D(64, kernel_size=(7, 7), stride=(2, 2),
+                                         padding='same', use_bias=False)
+        self.bn1 = keras.layers.BatchNormalization() 
+        self.relu = keras.layers.ReLU()
+        self.maxpool =keras.layers.MaxPool2D(pool_size=(3, 3), strides=(2, 2), padding='same')
         self.layer1 = self._make_layer(block, 64, layers[0])
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
-        self.bn2 = nn.BatchNorm2d(512 * block.expansion)
-        self.avgpool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Linear(512 * block.expansion, num_classes)
+        self.bn2 = keras.layers.BatchNormalization()
+        self.avgpool = keras.layers.AveragePooling2D(pool_size=(1, 1))
+        self.fc = keras.layers.Dense(num_classes)
 
         self.blockID = blockID
         self.downsampling_ratio = 1.
         self.size_after_maxpool = None
 
+        '''
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
@@ -139,23 +145,24 @@ class PreResNet(nn.Module):
                 m.bias.data.zero_()
             elif isinstance(m, nn.Linear):
                 m.bias.data.zero_()
+        '''
 
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
-            downsample = nn.Sequential(
-                nn.Conv2d(self.inplanes, planes * block.expansion,
-                          kernel_size=1, stride=stride, bias=False),
-                nn.BatchNorm2d(planes * block.expansion),
-            )
+            downsample = keras.Sequential([
+                keras.layers.Conv2D(planes * block.expansion, kernel_size=(1, 1),
+                                    strides=(stride, stride), padding='same', use_bias=False),
+                keras.layers.BatchNormalization()
+            ])
 
         layers = []
         layers.append(block(self.inplanes, planes, stride, downsample))
         self.inplanes = planes * block.expansion
-        for i in range(1, blocks):
+        for _ in range(1, blocks):
             layers.append(block(self.inplanes, planes))
 
-        return nn.Sequential(*layers)
+        return keras.Sequential(layers)
 
     def stochastic_downsampling(self, blockID, ratio):
         block_chosen = blockID is None and random.randint(-1, self.blockID) or blockID
@@ -164,14 +171,18 @@ class PreResNet(nn.Module):
             self.downsampling_ratio = downsampling_ratios[random.randint(0,1)]
         else:
             self.downsampling_ratio = 1.
-        for m in self.modules():
+        
+        # TEST
+        print("self.submodules: ", self.submodules)
+        #for m in self.modules():
+        for m in self.submodules:
             if isinstance(m, Bottleneck):
                 if m.blockID == block_chosen:
                     m.downsampling_ratio = downsampling_ratios[random.randint(0,1)]
                 else:
                     m.downsampling_ratio = 1.
 
-    def forward(self, x, blockID=None, ratio=None):
+    def call(self, x, blockID=None, ratio=None):
         self.stochastic_downsampling(blockID, ratio)
 
         x = self.conv1(x)
@@ -180,7 +191,10 @@ class PreResNet(nn.Module):
         if self.downsampling_ratio < 1:
             if self.size_after_maxpool is None:
                 self.size_after_maxpool = self.maxpool(x).size(2)
-            x = F.adaptive_max_pool2d(x, int(round(self.size_after_maxpool*self.downsampling_ratio)))
+            #x = F.adaptive_max_pool2d(x, int(round(self.size_after_maxpool*self.downsampling_ratio)))
+            x = tf.nn.max_pool2d(x, ksize=int(round(self.size_after_maxpool*self.downsampling_ratio)),
+                                 strides=int(round(self.size_after_maxpool*self.downsampling_ratio)),
+                                 padding='same') 
         else:
             x = self.maxpool(x)
 
@@ -192,7 +206,7 @@ class PreResNet(nn.Module):
         x = self.bn2(x)
         x = self.relu(x)
         x = self.avgpool(x)
-        x = x.view(x.size(0), -1)
+        x = tf.reshape(x, [x.shape[0], -1])  # x.view(x.size(0), -1)
         x = self.fc(x)
 
         return x
