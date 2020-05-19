@@ -292,7 +292,6 @@ def _one_step(model, x, y, criterion):
 def train(dset_train, dset_test, model, criterion, optimizer, epoch, accuracy, compute_loss):
     step_time = AverageMeter()
     data_time = AverageMeter()
-    losses = AverageMeter()
 
     end = time.time()
     for i, (input, target) in enumerate(dset_train):

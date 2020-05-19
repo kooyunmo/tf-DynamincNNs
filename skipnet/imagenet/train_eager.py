@@ -164,7 +164,7 @@ def train(dset_train, dset_test, model, epochs=5, show_loss=False):
         time_sum = 0
         cnt = 0
         for x, y in dset_train: # for every batch
-            y = tf.one_hot(y, 1000)
+            y = tf.one_hot(y, 1001)
             start = time.time()
             #global_step.assign_add(1) # add one step per iteration
             with tf.GradientTape() as g:
