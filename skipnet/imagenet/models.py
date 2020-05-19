@@ -63,7 +63,8 @@ class Bottleneck(keras.models.Model):
         self.conv2 = keras.layers.Conv2D(planes, kernel_size=(3, 3), strides=(stride, stride),
                                          padding='same', use_bias=False)
         self.bn2 = keras.layers.BatchNormalization()
-        self.conv3 = keras.layers.Conv2D(planes * 4, kernel_size=(1, 1), use_bias=False)
+        self.conv3 = keras.layers.Conv2D(planes * 4, kernel_size=(1, 1), strides=(1, 1),
+                                         padding='same', use_bias=False)
         self.bn3 = tf.keras.layers.BatchNormalization()
         self.relu = tf.keras.layers.ReLU()
         self.downsample = downsample
