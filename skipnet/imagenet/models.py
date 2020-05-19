@@ -57,7 +57,8 @@ class Bottleneck(keras.models.Model):
 
     def __init__(self, inplanes, planes, stride=1, downsample=None):
         super(Bottleneck, self).__init__()
-        self.conv1 = keras.layers.Conv2D(planes, kernel_size=(1, 1), use_bias=False)
+        self.conv1 = keras.layers.Conv2D(planes, kernel_size=(1, 1), strides=(1, 1),
+                                         padding='same', use_bias=False)
         self.bn1 = keras.layers.BatchNormalization()
         self.conv2 = keras.layers.Conv2D(planes, kernel_size=(3, 3), strides=(stride, stride),
                                          padding='same', use_bias=False)
