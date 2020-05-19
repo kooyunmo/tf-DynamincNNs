@@ -52,7 +52,7 @@ class BasicBlock(keras.models.Model):
             #out = F.adaptive_avg_pool2d(out, int(round(out.size(2)*self.downsampling_ratio)))
             out = tf.nn.avg_pool2d(out, int(round(out.shape[2] * self.downsampling_ratio)),
                                    strides=int(round(out.shape[2] * self.downsampling_ratio)),
-                                   padding='same')
+                                   padding='SAME')
 
         return out
 
@@ -68,7 +68,7 @@ class Bottleneck(keras.models.Model):
         self.conv2 = keras.layers.Conv2D(planes, kernel_size=(3, 3), strides=(stride, stride),
                                          padding='same', use_bias=False)
         self.bn2 = keras.layers.BatchNormalization()
-        self.conv3 =keras.layers.Conv2D(planes * self.expansion, kernel_size=(1, 1),
+        self.conv3 =keras.layers.Conv2D(planes * 4, kernel_size=(1, 1),
                                         strides=(1, 1), padding='same', use_bias=False)
         self.bn3 = keras.layers.BatchNormalization() 
         self.relu = keras.layers.ReLU()
@@ -104,7 +104,7 @@ class Bottleneck(keras.models.Model):
             #out = F.adaptive_avg_pool2d(out, int(round(out.size(2)*self.downsampling_ratio)))
             out = tf.nn.avg_pool2d(out, int(round(out.shape[2] * self.downsampling_ratio)),
                                    strides=int(round(out.shape[2] * self.downsampling_ratio)),
-                                   padding='same')
+                                   padding='SAME')
 
         return out
 
@@ -118,7 +118,7 @@ class PreResNet(keras.models.Model):
         global blockID
         blockID = 0
 
-        self.conv1 = keras.layers.Conv2D(64, kernel_size=(7, 7), stride=(2, 2),
+        self.conv1 = keras.layers.Conv2D(64, kernel_size=(7, 7), strides=(2, 2),
                                          padding='same', use_bias=False)
         self.bn1 = keras.layers.BatchNormalization() 
         self.relu = keras.layers.ReLU()
@@ -128,8 +128,10 @@ class PreResNet(keras.models.Model):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.bn2 = keras.layers.BatchNormalization()
-        self.avgpool = keras.layers.AveragePooling2D(pool_size=(1, 1))
-        self.fc = keras.layers.Dense(num_classes)
+        self.avgpool = keras.layers.AveragePooling2D(pool_size=(1, 1), padding='same')
+        self.fc1 = keras.layers.Dense(num_classes)
+        self.fc2 = keras.layers.Dense(num_classes)
+        self.fc3 = keras.layers.Dense(num_classes)
 
         self.blockID = blockID
         self.downsampling_ratio = 1.
@@ -173,7 +175,6 @@ class PreResNet(keras.models.Model):
             self.downsampling_ratio = 1.
         
         # TEST
-        print("self.submodules: ", self.submodules)
         #for m in self.modules():
         for m in self.submodules:
             if isinstance(m, Bottleneck):
@@ -190,11 +191,11 @@ class PreResNet(keras.models.Model):
         x = self.relu(x)
         if self.downsampling_ratio < 1:
             if self.size_after_maxpool is None:
-                self.size_after_maxpool = self.maxpool(x).size(2)
+                self.size_after_maxpool = self.maxpool(x).shape[2]
             #x = F.adaptive_max_pool2d(x, int(round(self.size_after_maxpool*self.downsampling_ratio)))
             x = tf.nn.max_pool2d(x, ksize=int(round(self.size_after_maxpool*self.downsampling_ratio)),
                                  strides=int(round(self.size_after_maxpool*self.downsampling_ratio)),
-                                 padding='same') 
+                                 padding='SAME') 
         else:
             x = self.maxpool(x)
 
@@ -207,7 +208,12 @@ class PreResNet(keras.models.Model):
         x = self.relu(x)
         x = self.avgpool(x)
         x = tf.reshape(x, [x.shape[0], -1])  # x.view(x.size(0), -1)
-        x = self.fc(x)
+        if x.shape[1] == 2048: 
+            x = self.fc1(x)
+        elif x.shape[1] == 8192:
+            x = self.fc2(x)
+        else:
+            x = self.fc3(x)
 
         return x
 
