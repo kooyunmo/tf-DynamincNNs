@@ -7,6 +7,9 @@ import tensorflow as tf
 from models import s_resnet
 import imagenet_preprocessing
 
+# DEBUG OPTION
+tf.get_logger().setLevel('ERROR')
+
 '''
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
@@ -298,13 +301,12 @@ def train(dset_train, dset_test, model, criterion, optimizer, epoch, accuracy, c
         # measure data loading time
         data_time.update(time.time() - end)
 
-        #target = tf.one_hot(target, 1001)
         with tf.GradientTape() as tape:
             preds, loss = _one_step(model, input, target, criterion)
-        
+
         grads = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(grads, model.trainable_variables))
-
+        
         # measure accuracy and record loss
         compute_loss(loss)
         accuracy(target, preds)

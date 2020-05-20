@@ -1,7 +1,7 @@
 import tensorflow as tf
 import tensorflow.keras as keras
 
-from utils.config import FLAGS
+#from utils.config import FLAGS
 
 width_mult_list = [0.25, 0.50, 0.75, 1.0]
 
@@ -43,8 +43,9 @@ class SlimmableConv2d(keras.layers.Conv2D):
         self.in_channels = self.in_channels_list[idx]
         self.out_channels = self.out_channels_list[idx]
         self.groups = self.groups_list[idx]
+
         #weight = self.weight[:self.out_channels, :self.in_channels, :, :]
-        weight = self.get_weights()[0][:self.out_channels, :self.in_channels, :, :]
+        weight = self.get_weights()[0][:, :, :self.in_channels, :self.out_channels]
 
         '''
         if self.bias is not None:
@@ -52,16 +53,12 @@ class SlimmableConv2d(keras.layers.Conv2D):
         else:
             bias = self.bias
         '''
-        if self.get_weights()[1] is not None:
+        if len(self.get_weights()) > 1:        # if a bias exists
             bias = self.get_weights()[1][:self.out_channels]
+            y = tf.nn.conv2d(input, weight, self.strides, padding='SAME')
+            y = tf.nn.bias_add(y, bias)
         else:
-            bias = self.get_weights()[1]
-
-        #y = nn.functional.conv2d(
-        #    input, weight, bias, self.stride, self.padding,
-        #    self.dilation, self.groups)
-        y = tf.nn.conv2d(input, weight, self.strides, padding='SAME')
-        y = tf.nn.bias_add(y, bias)
+            y = tf.nn.conv2d(input, weight, self.strides, padding='SAME')
 
         return y
 
@@ -79,14 +76,14 @@ class SlimmableLinear(keras.layers.Dense):
         self.in_features = self.in_features_list[idx]
         self.out_features = self.out_features_list[idx]
         #weight = self.weight[:self.out_features, :self.in_features]
-        weight = self.get_weights()[0][:self.out_features, :self.in_features]
+        weight = self.get_weights()[0][:self.in_features, :self.out_features]
         '''
         if self.bias is not None:
             bias = self.bias[:self.out_features]
         else:
             bias = self.bias
         '''
-        if self.get_weights()[1] is not None:
+        if len(self.get_weights()) > 1:
             bias = self.get_weights()[1][:self.out_features]
         else:
             bias = self.get_weights()[1]
@@ -146,7 +143,7 @@ class USConv2d(keras.layers.Conv2D):
         #    bias = self.bias[:self.out_channels]
         #else:
         #    bias = self.bias
-        if self.get_weights()[1] is not None:
+        if len(self.get_weights()) > 1:
             bias = self.get_weights()[1][:self.out_channels]
         else:
             bias = self.get_weights()[1]
@@ -182,7 +179,7 @@ class USLinear(keras.layers.Dense):
         #    bias = self.bias[:self.out_features]
         #else:
         #    bias = self.bias
-        if self.get_weights()[1] is not None:
+        if len(self.get_weights()) > 1:
             bias = self.get_weights()[1][:self.out_features]
         else:
             bias = self.get_weights()[1]

@@ -114,9 +114,10 @@ class Model(keras.models.Model):
 
     def call(self, x):
         x = self.features(x)
-        last_dim = x.shape[1]
+        last_dim = x.shape[3]
         x = tf.reshape(x, [-1, last_dim])   # x = x.view(-1, last_dim)
         x = self.classifier(x)
+
         return x
 
     '''
