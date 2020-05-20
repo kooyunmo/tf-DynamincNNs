@@ -6,7 +6,7 @@ from models import base
 class FlatResNet(tf.keras.models.Model):
 
     def seed(self, x):
-        x = self.relu(self.bn1(self.conv1(x)))      # CIFAR
+        #x = self.relu(self.bn1(self.conv1(x)))      # CIFAR
         x = self.maxpool(self.relu(self.bn1(self.conv1(x))))        # ImageNet
         #raise NotImplementedError
 
