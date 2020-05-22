@@ -159,6 +159,18 @@ def parse_record(raw_record, is_training=True, dtype=tf.float32):
 
 ################################################################
 
+def performance_stats(policies, rewards, matches):
+
+    policies = tf.concat(policies, 0) # torch.cat(policies, 0)
+    rewards = tf.concat(rewards, 0)
+    accuracy = tf.math.reduce_mean(tf.concat(matches, 0)) * 100
+
+    reward = tf.math.reduce_mean(rewards)
+
+    policy_set = [p.numpy().astype(np.int).astype(np.str) for p in policies]
+    policy_set = set([''.join(p) for p in policy_set])
+
+    return accuracy, reward, policy_set
 
 def get_reward(preds, targets, policy):
 
@@ -248,7 +260,6 @@ def train(epoch):
         with tf.GradientTape() as tape:
             loss, match, reward_sample, policy = _one_step(inputs, targets, batch_idx)
             
-
         grads = tape.gradient(loss, agent.trainable_variables)
         optimizer.apply_gradients(zip(grads, agent.trainable_variables))
 
@@ -256,18 +267,14 @@ def train(epoch):
         rewards.append(tf.stop_gradient(reward_sample))
         policies.append(tf.stop_gradient(policy))
 
-    '''
-    accuracy, reward, sparsity, variance, policy_set = utils.performance_stats(policies, rewards, matches)
+        compute_loss(loss)
 
-    log_str = 'E: %d | A: %.3f | R: %.2E | S: %.3f | V: %.3f | #: %d'%(epoch, accuracy, reward, sparsity, variance, len(policy_set))
-    print(log_str)
+        if batch_idx % 20 == 19:
+            accuracy, reward, policy_set = performance_stats(policies, rewards, matches)
+            log_str = '[BATCH: %d] | Acc: %.3f | Loss: %.3f | Reward: %.2E | #: %d'%(batch_idx+1, accuracy, compute_loss.result(), reward, len(policy_set))
+            print(log_str) 
 
-    log_value('train_accuracy', accuracy, epoch)
-    log_value('train_reward', reward, epoch)
-    log_value('train_sparsity', sparsity, epoch)
-    log_value('train_variance', variance, epoch)
-    log_value('train_unique_policies', len(policy_set), epoch)
-    '''
+
 
 '''
 def test(epoch):
@@ -343,8 +350,8 @@ raw_dataset_test = tf.data.TFRecordDataset(test_filenames)
 parsed_dataset_train = raw_dataset_train.map(parse_record).shuffle(1024).batch(batch_size)
 parsed_dataset_tests = raw_dataset_test.map(parse_record).shuffle(1024).batch(batch_size)
 
-rnet = FlatResNet224(Bottleneck, [3,4,23,3], 1001)
-agent = Policy224([1,1,1,1], num_blocks=33)
+rnet = FlatResNet224(Bottleneck, [3,4,23,3], 1001, False)
+agent = Policy224(layer_config=[1,1,1,1], num_blocks=33, trainable=True)
 
 num_blocks = sum(rnet.layer_config)
 

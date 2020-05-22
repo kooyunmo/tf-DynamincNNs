@@ -25,12 +25,12 @@ def conv3x3(in_planes, out_planes, stride=1):
 class BasicBlock(tf.keras.models.Model):
     expansion = 1
 
-    def __init__(self, inplanes, planes, stride=1):
+    def __init__(self, inplanes, planes, stride=1, trainable=True):
         super(BasicBlock, self).__init__()
         self.conv1 = conv3x3(inplanes, planes, stride)
-        self.bn1 = tf.keras.layers.BatchNormalization()
+        self.bn1 = tf.keras.layers.BatchNormalization(trainable=trainable)
         self.conv2 = conv3x3(planes, planes)
-        self.bn2 = tf.keras.layers.BatchNormalization()
+        self.bn2 = tf.keras.layers.BatchNormalization(trainable=trainable)
 
     def call(self, x):
         out = self.conv1(x)
@@ -46,15 +46,15 @@ class BasicBlock(tf.keras.models.Model):
 class Bottleneck(tf.keras.models.Model):
     expansion = 4
 
-    def __init__(self, inplanes, planes, stride=1):
+    def __init__(self, inplanes, planes, stride=1, trainable=True):
         super(Bottleneck, self).__init__()
         self.conv1 = tf.keras.layers.Conv2D(planes, kernel_size=(1, 1), use_bias=False)
-        self.bn1 = tf.keras.layers.BatchNormalization()
+        self.bn1 = tf.keras.layers.BatchNormalization(trainable=trainable)
         self.conv2 = tf.keras.layers.Conv2D(planes, kernel_size=(3, 3), strides=(stride, stride),
                                             padding='same', use_bias=False)
-        self.bn2 = tf.keras.layers.BatchNormalization()
+        self.bn2 = tf.keras.layers.BatchNormalization(trainable=trainable)
         self.conv3 = tf.keras.layers.Conv2D(planes * 4, kernel_size=(1, 1), use_bias=False)
-        self.bn3 = tf.keras.layers.BatchNormalization()
+        self.bn3 = tf.keras.layers.BatchNormalization(trainable=trainable)
         self.relu = tf.keras.layers.ReLU()
     
     def call(self, x):

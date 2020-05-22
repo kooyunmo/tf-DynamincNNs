@@ -2,22 +2,22 @@ import tensorflow as tf
 import tensorflow.keras as keras
 import numpy as np
 
-import base
+from models import base
 
 class FlatResNet(keras.models.Model):
 
     def seed(self, x):
         #x = self.relu(self.bn1(self.conv1(x)))      # CIFAR
-        x = self.maxpool(self.relu(self.bn1(self.conv1(x))))        # ImageNet
-        #raise NotImplementedError
+        #x = self.maxpool(self.relu(self.bn1(self.conv1(x))))        # ImageNet
+        raise NotImplementedError
 
     # This is different from PyTorch nn.Module forward function.
     # run a variable policy batch through the resnet implemented as a full mask over the residual
     # fast to train, non-indicative of time saving (use forward_single instead)
     def forward(self, x, policy):
-
+        #print("x1: ", x.shape)
         x = self.seed(x)
-
+        #print("x2: ", x.shape)
         t = 0
         for segment, num_blocks in enumerate(self.layer_config):
             for b in range(num_blocks):
@@ -29,11 +29,11 @@ class FlatResNet(keras.models.Model):
                     t += 1
                     continue
                 
+                #print("x3: ", x.shape)
                 action_mask = tf.reshape(tf.cast(action, tf.float32), [-1,1,1,1])
                 fx = tf.nn.relu(residual + self.blocks[segment][b](x))
                 x = fx * action_mask + residual*(1-action_mask)
                 t += 1
-        
         x = self.avgpool(x)
         x = tf.reshape(x, [x.shape[0], -1])
         x = self.fc(x)
@@ -119,11 +119,11 @@ class FlatResNet32(FlatResNet):
 # Regular Flattened Resnet, tailored for Imagenet etc.
 class FlatResNet224(FlatResNet):
 
-    def __init__(self, block, layers, num_classes=1001):
+    def __init__(self, block, layers, num_classes=1001, trainable=True):
         self.inplanes = 64
         super(FlatResNet224, self).__init__()
         self.conv1 = keras.layers.Conv2D(64, kernel_size=7, strides=(2, 2), padding='same', use_bias=False)
-        self.bn1 = keras.layers.BatchNormalization()
+        self.bn1 = keras.layers.BatchNormalization(trainable=trainable)
         self.relu = keras.layers.ReLU()
         self.maxpool = keras.layers.MaxPool2D(pool_size=(3, 3), strides=(2, 2), padding='same')
 
@@ -139,6 +139,7 @@ class FlatResNet224(FlatResNet):
         self.fc = keras.layers.Dense(num_classes)
 
         self.layer_config = layers
+        self.trainable = trainable
 
     def seed(self, x):
         x = self.maxpool(self.relu(self.bn1(self.conv1(x))))
@@ -151,13 +152,13 @@ class FlatResNet224(FlatResNet):
             downsample = keras.Sequential([
                 keras.layers.Conv2D(planes * block.expansion, kernel_size=1, strides=(stride, stride),
                                     padding='same', use_bias=False),
-                keras.layers.BatchNormalization()
+                keras.layers.BatchNormalization(trainable=self.trainable)
             ])
 
-        layers = [block(self.inplanes, planes, stride)]
+        layers = [block(self.inplanes, planes, stride, trainable=self.trainable)]
         self.inplanes = planes * block.expansion
         for i in range(1, blocks):
-            layers.append(block(self.inplanes, planes))
+            layers.append(block(self.inplanes, planes, trainable=self.trainable))
 
         return layers, downsample
 
@@ -193,9 +194,9 @@ class Policy32(keras.models.Model):
 
 class Policy224(keras.models.Model):
 
-    def __init__(self, layer_config=[1,1,1,1], num_blocks=16):
+    def __init__(self, layer_config=[1,1,1,1], num_blocks=16, trainable=True):
         super(Policy224, self).__init__()
-        self.features = FlatResNet224(base.BasicBlock, layer_config, num_classes=1001)
+        self.features = FlatResNet224(base.BasicBlock, layer_config, num_classes=1001, trainable=trainable)
 
         '''
         resnet18 = torchmodels.resnet18(pretrained=True)
