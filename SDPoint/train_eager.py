@@ -226,7 +226,7 @@ def main():
               accuracy=compute_acc, compute_loss=compute_loss)
 
 
-#@tf.function
+@tf.function
 def _one_step(model, x, y, criterion):
     logits = model(x, training=True)
     loss = criterion(y, logits)
@@ -245,6 +245,7 @@ def train(dset_train, dset_test, model, criterion, optimizer, epoch, accuracy, c
 
         #target = tf.one_hot(target, 1001)
         with tf.GradientTape() as tape:
+            model.stochastic_downsampling(None, None)
             preds, loss = _one_step(model, input, target, criterion)
         
         grads = tape.gradient(loss, model.trainable_variables)

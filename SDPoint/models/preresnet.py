@@ -49,10 +49,10 @@ class BasicBlock(keras.models.Model):
         out += residual
 
         if self.downsampling_ratio < 1:
+            # torch.nn.functional.adaptive_avg_pool2d(input, output_size)
             #out = F.adaptive_avg_pool2d(out, int(round(out.size(2)*self.downsampling_ratio)))
-            out = tf.nn.avg_pool2d(out, int(round(out.shape[2] * self.downsampling_ratio)),
-                                   strides=int(round(out.shape[2] * self.downsampling_ratio)),
-                                   padding='SAME')
+            ksize = out.shape[1] // int(round(out.shape[1] * self.downsampling_ratio))
+            out = tf.nn.avg_pool2d(out, ksize=ksize, strides=ksize, padding='VALID')
 
         return out
 
@@ -102,9 +102,8 @@ class Bottleneck(keras.models.Model):
 
         if self.downsampling_ratio < 1:
             #out = F.adaptive_avg_pool2d(out, int(round(out.size(2)*self.downsampling_ratio)))
-            out = tf.nn.avg_pool2d(out, int(round(out.shape[2] * self.downsampling_ratio)),
-                                   strides=int(round(out.shape[2] * self.downsampling_ratio)),
-                                   padding='SAME')
+            ksize = out.shape[1] // int(round(out.shape[1] * self.downsampling_ratio))
+            out = tf.nn.avg_pool2d(out, ksize=ksize, strides=ksize, padding='VALID')
 
         return out
 
@@ -128,10 +127,8 @@ class PreResNet(keras.models.Model):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.bn2 = keras.layers.BatchNormalization()
-        self.avgpool = keras.layers.AveragePooling2D(pool_size=(1, 1), padding='same')
-        self.fc1 = keras.layers.Dense(num_classes)
-        self.fc2 = keras.layers.Dense(num_classes)
-        self.fc3 = keras.layers.Dense(num_classes)
+        # self.avgpool = nn.AdaptiveAvgPool2d(1)
+        self.fc = keras.layers.Dense(num_classes)
 
         self.blockID = blockID
         self.downsampling_ratio = 1.
@@ -182,9 +179,12 @@ class PreResNet(keras.models.Model):
                     m.downsampling_ratio = downsampling_ratios[random.randint(0,1)]
                 else:
                     m.downsampling_ratio = 1.
+    
+    #def build(self, input_shape):
+        
 
     def call(self, x, blockID=None, ratio=None):
-        self.stochastic_downsampling(blockID, ratio)
+        #self.stochastic_downsampling(blockID, ratio)
 
         x = self.conv1(x)
         x = self.bn1(x)
@@ -192,12 +192,14 @@ class PreResNet(keras.models.Model):
         if self.downsampling_ratio < 1:
             if self.size_after_maxpool is None:
                 self.size_after_maxpool = self.maxpool(x).shape[2]
+                tf.print("1")
             #x = F.adaptive_max_pool2d(x, int(round(self.size_after_maxpool*self.downsampling_ratio)))
-            x = tf.nn.max_pool2d(x, ksize=int(round(self.size_after_maxpool*self.downsampling_ratio)),
-                                 strides=int(round(self.size_after_maxpool*self.downsampling_ratio)),
-                                 padding='SAME') 
+            ksize = x.shape[1] // int(round(self.size_after_maxpool*self.downsampling_ratio)) 
+            x = tf.nn.max_pool2d(x, ksize=ksize, strides=ksize, padding='VALID')
+            tf.print("2")
         else:
             x = self.maxpool(x)
+            tf.print("3")
 
         x = self.layer1(x)
         x = self.layer2(x)
@@ -206,14 +208,10 @@ class PreResNet(keras.models.Model):
 
         x = self.bn2(x)
         x = self.relu(x)
-        x = self.avgpool(x)
+        #x = self.avgpool(x)
+        x = tf.nn.avg_pool2d(x, ksize=x.shape[1], strides=x.shape[1], padding="VALID")
         x = tf.reshape(x, [x.shape[0], -1])  # x.view(x.size(0), -1)
-        if x.shape[1] == 2048: 
-            x = self.fc1(x)
-        elif x.shape[1] == 8192:
-            x = self.fc2(x)
-        else:
-            x = self.fc3(x)
+        x = self.fc(x)
 
         return x
 
