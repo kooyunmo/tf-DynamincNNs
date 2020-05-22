@@ -19,7 +19,7 @@ class Flatten(tf.keras.models.Model):
        return tf.reshape(x, [x.shape[0], -1])
 
 def conv3x3(in_planes, out_planes, stride=1):
-    return tf.keras.layers.Conv2D(out_planes, kernel_size=(3, 3), stride=(stride, stride),
+    return tf.keras.layers.Conv2D(out_planes, kernel_size=(3, 3), strides=(stride, stride),
                                   padding='same', use_bias=False)
 
 class BasicBlock(tf.keras.models.Model):
@@ -50,7 +50,7 @@ class Bottleneck(tf.keras.models.Model):
         super(Bottleneck, self).__init__()
         self.conv1 = tf.keras.layers.Conv2D(planes, kernel_size=(1, 1), use_bias=False)
         self.bn1 = tf.keras.layers.BatchNormalization()
-        self.conv2 = tf.keras.layers.Conv2D(planes, kernel_size=(3, 3), stride=(stride, stride),
+        self.conv2 = tf.keras.layers.Conv2D(planes, kernel_size=(3, 3), strides=(stride, stride),
                                             padding='same', use_bias=False)
         self.bn2 = tf.keras.layers.BatchNormalization()
         self.conv3 = tf.keras.layers.Conv2D(planes * 4, kernel_size=(1, 1), use_bias=False)
