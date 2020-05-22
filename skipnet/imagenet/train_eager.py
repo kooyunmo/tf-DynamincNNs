@@ -4,13 +4,8 @@ import models
 import time
 import os
 
-import inception_preprocessing
 import imagenet_preprocessing
-
-import logging
 import datetime
-suffix = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
-logging.basicConfig(filename='eager_'+suffix+".log", level=logging.INFO)
 
 tf.random.set_seed(0)
 np.random.seed(0)
@@ -48,24 +43,6 @@ def get_filenames(is_training, data_dir):
 
 def _parse_example_proto(example_serialized):
     """Parses an Example proto containing a training example of an image.
-    The output of the build_image_data.py image preprocessing script is a dataset
-    containing serialized Example protocol buffers. Each Example proto contains
-    the following fields (values are included as examples):
-        image/height: 462
-        image/width: 581
-        image/colorspace: 'RGB'
-        image/channels: 3
-        image/class/label: 615
-        image/class/synset: 'n03623198'
-        image/class/text: 'knee pad'
-        image/object/bbox/xmin: 0.1
-        image/object/bbox/xmax: 0.9
-        image/object/bbox/ymin: 0.2
-        image/object/bbox/ymax: 0.6
-        image/object/bbox/label: 615
-        image/format: 'JPEG'
-        image/filename: 'ILSVRC2012_val_00041207.JPEG'
-        image/encoded: <JPEG encoded string>
     Args:
         example_serialized: scalar Tensor tf.string containing a serialized
         Example protocol buffer.
@@ -257,5 +234,4 @@ if __name__ == "__main__":
     optimizer = tf.keras.optimizers.Adam()
 
     print("############ Start Training ##############")
-    logging.info("############ Start Training ##############")
     train(dset_train=parsed_dataset_train, dset_test=parsed_dataset_tests, model=model, epochs=epochs)
