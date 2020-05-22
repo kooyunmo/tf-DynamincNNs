@@ -12,12 +12,6 @@ tf.get_logger().setLevel('ERROR')
 
 
 parser = argparse.ArgumentParser(description='TensorFlow ImageNet Training - Stochastic Downsampling')
-#parser.add_argument('data', metavar='DIR', help='path to dataset')
-#parser.add_argument('--arch', '-a', metavar='ARCH', default='preresnet101',
-#                    choices=model_names,
-#                    help='model architecture: ' +
-#                        ' | '.join(model_names) +
-#                        ' (default: preresnet101)')
 parser.add_argument('--epochs', default=115, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
@@ -80,36 +74,7 @@ def get_filenames(is_training, data_dir):
 
 
 def _parse_example_proto(example_serialized):
-    """Parses an Example proto containing a training example of an image.
-    The output of the build_image_data.py image preprocessing script is a dataset
-    containing serialized Example protocol buffers. Each Example proto contains
-    the following fields (values are included as examples):
-        image/height: 462
-        image/width: 581
-        image/colorspace: 'RGB'
-        image/channels: 3
-        image/class/label: 615
-        image/class/synset: 'n03623198'
-        image/class/text: 'knee pad'
-        image/object/bbox/xmin: 0.1
-        image/object/bbox/xmax: 0.9
-        image/object/bbox/ymin: 0.2
-        image/object/bbox/ymax: 0.6
-        image/object/bbox/label: 615
-        image/format: 'JPEG'
-        image/filename: 'ILSVRC2012_val_00041207.JPEG'
-        image/encoded: <JPEG encoded string>
-    Args:
-        example_serialized: scalar Tensor tf.string containing a serialized
-        Example protocol buffer.
-    Returns:
-        image_buffer: Tensor tf.string containing the contents of a JPEG file.
-        label: Tensor tf.int32 containing the label.
-        bbox: 3-D float Tensor of bounding boxes arranged [1, num_boxes, coords]
-        where each coordinate is [0, 1) and the coordinates are arranged as
-        [ymin, xmin, ymax, xmax].
-    """
-    # Dense features in Example proto.
+
     feature_map = {
         'image/encoded': tf.io.FixedLenFeature([], dtype=tf.string,
                                                 default_value=''),
@@ -148,17 +113,7 @@ def _parse_example_proto(example_serialized):
 
 
 def parse_record(raw_record, is_training=True, dtype=tf.float32):
-    """Parses a record containing a training example of an image.
-    The input record is parsed into a label and image, and the image is passed
-    through preprocessing steps (cropping, flipping, and so on).
-    Args:
-        raw_record: scalar Tensor tf.string containing a serialized
-        Example protocol buffer.
-        is_training: A boolean denoting whether the input is for training.
-        dtype: data type to use for images/features.
-    Returns:
-        Tuple with processed image tensor and one-hot-encoded label tensor.
-    """
+    
     image_buffer, label, bbox = _parse_example_proto(raw_record)
 
     image = imagenet_preprocessing.preprocess_image(
@@ -205,7 +160,7 @@ def adjust_learning_rate(optimizer, epoch):
 '''
 
 
-#@tf.function
+@tf.function
 def _one_step(model, x, y, criterion):
     logits = model(x, training=True)
     loss = criterion(y, logits)
@@ -265,7 +220,7 @@ def main():
     compute_acc.reset_states()
 
     # constant for ImageNet
-    batch_size = 64
+    batch_size = 32
 
     # get dataset
     data_dir = "/cmsdata/ssd0/cmslab/imagenet-data/"

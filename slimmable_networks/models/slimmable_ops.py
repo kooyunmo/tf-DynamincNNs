@@ -45,7 +45,7 @@ class SlimmableConv2d(keras.layers.Conv2D):
         self.groups = self.groups_list[idx]
 
         #weight = self.weight[:self.out_channels, :self.in_channels, :, :]
-        weight = self.get_weights()[0][:, :, :self.in_channels, :self.out_channels]
+        weight = self.weights[0][:, :, :self.in_channels, :self.out_channels]
 
         '''
         if self.bias is not None:
@@ -53,8 +53,8 @@ class SlimmableConv2d(keras.layers.Conv2D):
         else:
             bias = self.bias
         '''
-        if len(self.get_weights()) > 1:        # if a bias exists
-            bias = self.get_weights()[1][:self.out_channels]
+        if len(self.weights) > 1:        # if a bias exists
+            bias = self.weights[1][:self.out_channels]
             y = tf.nn.conv2d(input, weight, self.strides, padding='SAME')
             y = tf.nn.bias_add(y, bias)
         else:
@@ -76,23 +76,22 @@ class SlimmableLinear(keras.layers.Dense):
         self.in_features = self.in_features_list[idx]
         self.out_features = self.out_features_list[idx]
         #weight = self.weight[:self.out_features, :self.in_features]
-        weight = self.get_weights()[0][:self.in_features, :self.out_features]
+        weight = self.weights[0][:self.in_features, :self.out_features]
         '''
         if self.bias is not None:
             bias = self.bias[:self.out_features]
         else:
             bias = self.bias
         '''
-        if len(self.get_weights()) > 1:
-            bias = self.get_weights()[1][:self.out_features]
+        if len(self.weights) > 1:
+            bias = self.weights[1][:self.out_features]
+            y = tf.matmul(input, weight)
+            y = tf.nn.bias_add(y, bias)
         else:
-            bias = self.get_weights()[1]
-            
+            y = tf.matmul(input, weight)
+
+        return y
         #return nn.functional.linear(input, weight, bias)
-        new_dense = keras.layers.Dense(self.units)
-        new_dense(input)        # for weight initialization with real values
-        new_dense.set_weights([weight, bias])
-        return new_dense(input)
 
 
 def make_divisible(v, divisor=8, min_value=1):
@@ -138,15 +137,15 @@ class USConv2d(keras.layers.Conv2D):
                 / self.ratio[1]) * self.ratio[1]
         self.groups = self.in_channels if self.depthwise else 1
         #weight = self.weight[:self.out_channels, :self.in_channels, :, :]
-        weight = self.get_weights()[0][:self.out_channels, :self.in_channels, :, :]
+        weight = self.weights[0][:self.out_channels, :self.in_channels, :, :]
         #if self.bias is not None:
         #    bias = self.bias[:self.out_channels]
         #else:
         #    bias = self.bias
-        if len(self.get_weights()) > 1:
-            bias = self.get_weights()[1][:self.out_channels]
+        if len(self.weights) > 1:
+            bias = self.weights[1][:self.out_channels]
         else:
-            bias = self.get_weights()[1]
+            bias = self.weights[1]
         #y = nn.functional.conv2d(
         #    input, weight, bias, self.stride, self.padding,
         #    self.dilation, self.groups)
@@ -174,15 +173,15 @@ class USLinear(keras.layers.Dense):
             self.out_features = make_divisible(
                 self.out_features_max * self.width_mult)
         #weight = self.weight[:self.out_features, :self.in_features]
-        weight = self.get_weights()[0][:self.out_features, :self.in_features]
+        weight = self.weights[0][:self.out_features, :self.in_features]
         #if self.bias is not None:
         #    bias = self.bias[:self.out_features]
         #else:
         #    bias = self.bias
-        if len(self.get_weights()) > 1:
-            bias = self.get_weights()[1][:self.out_features]
+        if len(self.weights) > 1:
+            bias = self.weights[1][:self.out_features]
         else:
-            bias = self.get_weights()[1]
+            bias = self.weights[1]
         #return nn.functional.linear(input, weight, bias)
         new_dense = keras.layers.Dense(self.units)
         new_dense(input)        # for weight initialization with real values
@@ -209,8 +208,8 @@ class USBatchNorm2d(keras.layers.BatchNormalization):
         self.ignore_model_profiling = True
 
     def call(self, input):
-        weight = self.get_weights()[0]  # self.weight
-        bias = self.get_weights()[1]    # self.bias
+        weight = self.weights[0]  # self.weight
+        bias = self.weights[1]    # self.bias
         c = make_divisible(
             self.num_features_max * self.width_mult / self.ratio) * self.ratio
         '''
