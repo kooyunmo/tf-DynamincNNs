@@ -170,7 +170,6 @@ def train(dset_train, dset_test, model, epochs=5, show_loss=False):
             with tf.GradientTape() as g:
                 #write_summary(loss, writer_train, 'loss')
                 loss = _one_step(model, x, y)
-                print('Training loss: ' + str(loss.numpy()))
 
             # Gets gradients and applies them
             grads = g.gradient(loss, model.trainable_variables)
@@ -228,7 +227,7 @@ def init_model(model, input_shape):
 if __name__ == "__main__":
 
     # constants for imagenet
-    batch_size = 8
+    batch_size = 64
     epochs = 1
     image_size = 224
     channels = 3

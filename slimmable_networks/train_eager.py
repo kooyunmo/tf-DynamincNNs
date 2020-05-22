@@ -10,11 +10,6 @@ import imagenet_preprocessing
 # DEBUG OPTION
 tf.get_logger().setLevel('ERROR')
 
-'''
-model_names = sorted(name for name in models.__dict__
-    if name.islower() and not name.startswith("__")
-    and callable(models.__dict__[name]))
-'''
 
 parser = argparse.ArgumentParser(description='TensorFlow ImageNet Training - Stochastic Downsampling')
 #parser.add_argument('data', metavar='DIR', help='path to dataset')
@@ -123,7 +118,7 @@ def _parse_example_proto(example_serialized):
         'image/class/text': tf.io.FixedLenFeature([], dtype=tf.string,
                                                     default_value=''),
     }
-    
+
     sparse_float32 = tf.io.VarLenFeature(dtype=tf.float32)
     # Sparse features in Example proto.
     feature_map.update(
@@ -180,217 +175,6 @@ def parse_record(raw_record, is_training=True, dtype=tf.float32):
 
 ################################################################
 
-
-
-def main():
-    global args, best_prec1
-    args = parser.parse_args()
-
-    # create model
-    #model = models.__dict__[args.arch]()
-    model = s_resnet.Model()
-
-    # define loss function (criterion) and optimizer
-    criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True) # nn.CrossEntropyLoss().cuda()
-
-    #optimizer = torch.optim.SGD(model.parameters(),
-    #							 args.lr, momentum=args.momentum,
-    # 							 weight_decay=args.weight_decay)
-    optimizer = tf.keras.optimizers.SGD(
-        learning_rate=tf.keras.optimizers.schedules.ExponentialDecay(args.lr, 10000, 0.7), 
-        momentum=args.momentum)
-    
-    compute_loss = tf.keras.metrics.Mean()
-    compute_acc = tf.keras.metrics.SparseCategoricalAccuracy()
-
-    # PyTorch Data loading code
-    '''
-    traindir = os.path.join(args.data, 'train')
-    valdir = os.path.join(args.data, 'val')
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
-
-    train_dataset = datasets.ImageFolder(
-        traindir,
-        transforms.Compose([
-            transforms.RandomResizedCrop(224),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            normalize,
-        ]))
-
-    if args.distributed:
-        train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
-    else:
-        train_sampler = None
-
-    if args.evaluate:
-        args.batch_size = args.val_batch_size
-
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
-        num_workers=args.workers, pin_memory=True, sampler=train_sampler)
-
-    val_loader = torch.utils.data.DataLoader(
-        datasets.ImageFolder(valdir, transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            normalize,
-        ])),
-        batch_size=args.batch_size, shuffle=False,
-        num_workers=args.workers, pin_memory=True)
-
-    if args.evaluate:
-        model.eval()
-        val_results_file = open(args.val_results_path, 'w')
-        val_results_file.write('blockID\tratio\tflops\ttop1-acc\ttop5-acc\t\n')
-        for i in [-1] + [model.module.blockID] + list(range(model.module.blockID)):
-            for r in [0.5, 0.75]:
-                model_flops = flops.calculate(model, i, r)
-                top1, top5 = validate(train_loader, val_loader, model, criterion, i, r)
-                val_results_file.write('{0}\t{1}\t{2}\t{top1:.3f}\t{top5:.3f}\n'.format(
-                                        i if i>-1 else 'nil', r if i>-1 else 'nil',
-                                        model_flops, top1=top1, top5=top5))
-                if i == -1:
-                    break
-        val_results_file.close()
-        return
-    '''
-
-    # constant for ImageNet
-    batch_size = 32
-
-    # get dataset
-    data_dir = "/cmsdata/ssd0/cmslab/imagenet-data/"
-
-    # ResNet preprocessing
-    train_filenames = get_filenames(is_training=True, data_dir=data_dir)
-    raw_dataset_train = tf.data.TFRecordDataset(train_filenames)
-
-    test_filenames = get_filenames(is_training=False, data_dir=data_dir)
-    raw_dataset_test = tf.data.TFRecordDataset(test_filenames)
-
-    # HY: This dataset is for resnet preprocessing
-    parsed_dataset_train = raw_dataset_train.map(parse_record).shuffle(1024).batch(batch_size)
-    parsed_dataset_tests = raw_dataset_test.map(parse_record).shuffle(1024).batch(batch_size)
-
-    for epoch in range(args.start_epoch, args.epochs):
-
-        # train for one epoch
-        #train(train_loader, model, criterion, optimizer, epoch)
-        train(dset_train=parsed_dataset_train, dset_test=parsed_dataset_tests, model=model,
-              criterion=criterion, optimizer=optimizer, epoch=epoch,
-              accuracy=compute_acc, compute_loss=compute_loss)
-
-
-#@tf.function
-def _one_step(model, x, y, criterion):
-    logits = model(x, training=True)
-    loss = criterion(y, logits)
-
-    return logits, loss
-
-
-def train(dset_train, dset_test, model, criterion, optimizer, epoch, accuracy, compute_loss):
-    step_time = AverageMeter()
-    data_time = AverageMeter()
-
-    end = time.time()
-    for i, (input, target) in enumerate(dset_train):
-        # measure data loading time
-        data_time.update(time.time() - end)
-
-        with tf.GradientTape() as tape:
-            preds, loss = _one_step(model, input, target, criterion)
-
-        grads = tape.gradient(loss, model.trainable_variables)
-        optimizer.apply_gradients(zip(grads, model.trainable_variables))
-        
-        # measure accuracy and record loss
-        compute_loss(loss)
-        accuracy(target, preds)
-
-        # measure elapsed time
-        step_time.update(time.time() - end)
-        end = time.time()
-
-        if i % args.print_freq == 0:
-            print('[Epoch: {}][Batch: {}]\t Loss {}\t acc {}'.format(epoch, i,
-                                                                     compute_loss.result(), 
-                                                                     accuracy.result()))
-
-'''
-def validate(train_loader, val_loader, model, criterion, blockID, ratio):
-    batch_time = AverageMeter()
-    data_time = AverageMeter()
-    losses = AverageMeter()
-    top1 = AverageMeter()
-    top5 = AverageMeter()
-
-    # switch to train mode
-    model.train()
-
-    with torch.no_grad():
-        end = time.time()
-        for i, (input, _) in enumerate(train_loader):
-            # measure data loading time
-            data_time.update(time.time() - end)
-
-            input = input.cuda()
-
-            # compute output
-            output = model(input, blockID=blockID, ratio=ratio)
-
-            # measure elapsed time
-            batch_time.update(time.time() - end)
-            end = time.time()
-
-            if i % args.print_freq == 0:
-                print('Iteration: [{0}/{1}]\t'
-                      'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                      'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'.format(
-                       i, len(train_loader), batch_time=batch_time,
-                       data_time=data_time))
-
-    # switch to evaluate mode
-    model.eval()
-
-    with torch.no_grad():
-        end = time.time()
-        for i, (input, target) in enumerate(val_loader):
-            input = input.cuda()
-            target = target.cuda(non_blocking=True)
-
-            # compute output
-            output = model(input, blockID=blockID, ratio=ratio)
-            loss = criterion(output, target)
-
-            # measure accuracy and record loss
-            prec1, prec5 = accuracy(output, target, topk=(1, 5))
-            losses.update(loss.item(), input.size(0))
-            top1.update(prec1[0], input.size(0))
-            top5.update(prec5[0], input.size(0))
-
-            # measure elapsed time
-            batch_time.update(time.time() - end)
-            end = time.time()
-
-            if i % args.print_freq == 0:
-                print('Test: [{0}/{1}]\t'
-                      'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                      'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                      'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
-                      'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
-                       i, len(val_loader), batch_time=batch_time, loss=losses,
-                       top1=top1, top5=top5))
-
-        print(' * Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f}'
-              .format(top1=top1, top5=top5))
-
-    return top1.avg, top5.avg
-'''
-
 class AverageMeter(object):
     """Computes and stores the average and current value"""
     def __init__(self):
@@ -420,22 +204,91 @@ def adjust_learning_rate(optimizer, epoch):
         param_group['lr'] = lr
 '''
 
-'''
-def accuracy(output, target, topk=(1,)):
-    """Computes the precision@k for the specified values of k"""
-    maxk = max(topk)
-    batch_size = target.shape[0]
 
-    _, pred = output.topk(maxk, 1, True, True)
-    pred = pred.t()
-    correct = pred.eq(target.view(1, -1).expand_as(pred))
+#@tf.function
+def _one_step(model, x, y, criterion):
+    logits = model(x, training=True)
+    loss = criterion(y, logits)
 
-    res = []
-    for k in topk:
-        correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
-        res.append(correct_k.mul_(100.0 / batch_size))
-    return res
-'''
+    return logits, loss
+
+def train(dset_train, dset_test, model, criterion, optimizer, epoch, accuracy, compute_loss):
+    step_time = AverageMeter()
+    data_time = AverageMeter()
+
+    end = time.time()
+    for i, (input, target) in enumerate(dset_train):
+        # measure data loading time
+        data_time.update(time.time() - end)
+
+        with tf.GradientTape() as tape:
+            preds, loss = _one_step(model, input, target, criterion)
+
+        grads = tape.gradient(loss, model.trainable_variables)
+        optimizer.apply_gradients(zip(grads, model.trainable_variables))
+
+        # measure accuracy and record loss
+        compute_loss(loss)
+        accuracy(target, preds)
+
+        # measure elapsed time
+        step_time.update(time.time() - end)
+        end = time.time()
+
+        if i % args.print_freq == 0:
+            print('[Epoch: {}][Batch: {}]\t Loss {}\t acc {}'.format(epoch, i,
+                                                                     compute_loss.result(),
+                                                                     accuracy.result() * 100))
+
+
+def main():
+    global args, best_prec1
+    args = parser.parse_args()
+
+    # create model
+    model = s_resnet.Model()
+
+    # define loss function (criterion) and optimizer
+    criterion = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True) # nn.CrossEntropyLoss().cuda()
+
+    #optimizer = torch.optim.SGD(model.parameters(),
+    #							 args.lr, momentum=args.momentum,
+    # 							 weight_decay=args.weight_decay)
+    optimizer = tf.keras.optimizers.SGD(
+        learning_rate=tf.keras.optimizers.schedules.ExponentialDecay(args.lr, 10000, 0.7),
+        momentum=args.momentum)
+
+    compute_loss = tf.keras.metrics.Mean()
+    compute_acc = tf.keras.metrics.SparseCategoricalAccuracy()
+
+    compute_loss.reset_states()
+    compute_acc.reset_states()
+
+    # constant for ImageNet
+    batch_size = 64
+
+    # get dataset
+    data_dir = "/cmsdata/ssd0/cmslab/imagenet-data/"
+
+    # ResNet preprocessing
+    train_filenames = get_filenames(is_training=True, data_dir=data_dir)
+    raw_dataset_train = tf.data.TFRecordDataset(train_filenames)
+
+    test_filenames = get_filenames(is_training=False, data_dir=data_dir)
+    raw_dataset_test = tf.data.TFRecordDataset(test_filenames)
+
+    # HY: This dataset is for resnet preprocessing
+    parsed_dataset_train = raw_dataset_train.map(parse_record).shuffle(1024).batch(batch_size)
+    parsed_dataset_tests = raw_dataset_test.map(parse_record).shuffle(1024).batch(batch_size)
+
+    for epoch in range(args.start_epoch, args.epochs):
+
+        # train for one epoch
+        #train(train_loader, model, criterion, optimizer, epoch)
+        train(dset_train=parsed_dataset_train, dset_test=parsed_dataset_tests, model=model,
+              criterion=criterion, optimizer=optimizer, epoch=epoch,
+              accuracy=compute_acc, compute_loss=compute_loss)
+
 
 if __name__ == '__main__':
     main()
